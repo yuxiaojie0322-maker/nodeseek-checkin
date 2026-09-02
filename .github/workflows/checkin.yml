@@ -9,6 +9,9 @@ on:
 jobs:
   checkin:
     runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
     
     steps:
       - name: 检出代码
@@ -37,16 +40,17 @@ jobs:
         run: |
           python checkin.py
 
-      - name: 清理旧工作日志（只保留当前这次运行）
+      - name: 🧹 清理旧的工作流运行记录（仅保留最新1条）
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          THIS_RUN="${{ github.run_id }}"
-          gh run list --workflow "checkin.yml" --limit 50 --json databaseId \
-            --jq ".[].databaseId" \
-            | grep -v "^${THIS_RUN}$" \
-            | while read id; do
-                echo "删除旧日志 #$id"
-                gh run delete "$id" 2>/dev/null || true
-              done
-          echo "✅ 已清理完毕"
+          runs=$(gh run list --workflow="${{ github.workflow }}" --limit=100 --json databaseId --jq '.[].databaseId')
+          count=0
+          for run_id in $runs; do
+            count=$((count + 1))
+            if [ $count -gt 1 ]; then
+              echo "删除运行记录: $run_id"
+              gh run delete $run_id || true
+            fi
+          done
